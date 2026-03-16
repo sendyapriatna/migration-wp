@@ -58,6 +58,7 @@ class SSHController extends Controller
             // note* update public_html/ipcek.sndyaccess.my.id/wp-config.php >> ke dinamis by $request
             $output = $ssh->exec('cat '.$request->source_path. '/wp-config.php');
 
+            //parsing wp config
             preg_match("/define\s*\(\s*['\"]DB_NAME['\"]\s*,\s*['\"](.+?)['\"]\s*\)/", $output, $dbName);
             preg_match("/define\s*\(\s*['\"]DB_USER['\"]\s*,\s*['\"](.+?)['\"]\s*\)/", $output, $dbUser);
             preg_match("/define\s*\(\s*['\"]DB_PASSWORD['\"]\s*,\s*['\"](.+?)['\"]\s*\)/", $output, $dbPassword);
@@ -116,13 +117,16 @@ class SSHController extends Controller
             $sshB->exec("wget -c -O {$targetBackupFolder}/{$backupDBName} {$backupDBurl}");
             $sshB->exec("wget -c -O {$targetBackupFolder}/{$backupWPName} {$backupWPurl}");
 
+            //proses hapus menghapus
+            //hapus file db dan wp di folder backups
+            $ssh->exec("rm -f {$backupFile}");
+            $ssh->exec("rm -f {$backupFiles}");
 
+            // hapus symlink
+            $ssh->exec("rm -f {$publicLink}");
 
             return response()->json([
                 'status' => 'OK',
-                'db_info' => $dbInfo,
-                'backup_file' => $backupFile,
-                'backup_files' => $backupFiles
             ]);
         } else {
             return response()->json([
