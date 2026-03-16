@@ -50,6 +50,89 @@ class SSHController extends Controller
             $request->target_password
         );
 
+        if ($testA['status'] === 'OK' && $testB['status'] === 'OK') {
+            $ssh = $testA['ssh']; // sekarang key 'ssh' ada
+            $sshB = $testB['ssh'];
+
+            // cek file wp-config.php
+            // note* update public_html/ipcek.sndyaccess.my.id/wp-config.php >> ke dinamis by $request
+            $output = $ssh->exec('cat '.$request->source_path. '/wp-config.php');
+
+            preg_match("/define\s*\(\s*['\"]DB_NAME['\"]\s*,\s*['\"](.+?)['\"]\s*\)/", $output, $dbName);
+            preg_match("/define\s*\(\s*['\"]DB_USER['\"]\s*,\s*['\"](.+?)['\"]\s*\)/", $output, $dbUser);
+            preg_match("/define\s*\(\s*['\"]DB_PASSWORD['\"]\s*,\s*['\"](.+?)['\"]\s*\)/", $output, $dbPassword);
+            preg_match("/define\s*\(\s*['\"]DB_HOST['\"]\s*,\s*['\"](.+?)['\"]\s*\)/", $output, $dbHost);
+            preg_match("/\\\$table_prefix\s*=\s*['\"](.+?)['\"]\s*;/", $output, $tablePrefix);
+
+            // hasil parsing
+            $dbInfo = [
+                'DB_NAME' => $dbName[1] ?? null,
+                'DB_USER' => $dbUser[1] ?? null,
+                'DB_PASSWORD' => $dbPassword[1] ?? null,
+                'DB_HOST' => $dbHost[1] ?? 'localhost',
+                'table_prefix' => $tablePrefix[1] ?? 'wp_',
+            ];
+
+            // Backup folder & file
+            $backupFolder = '/home/'.$request->source_username.'/backups';
+            $ssh->exec("mkdir -p $backupFolder"); // pastikan folder ada
+            $backupFile = $backupFolder . '/backup_' . date('Ymd_His') . '.sql';
+
+            // Jalankan mysqldump
+            $command = "mysqldump -h {$dbInfo['DB_HOST']} -u {$dbInfo['DB_USER']} -p'{$dbInfo['DB_PASSWORD']}' {$dbInfo['DB_NAME']} > {$backupFile}";
+            $ssh->exec($command);
+
+            // Backup file WordPress
+            $backupFiles = $backupFolder . '/wp_files_'. date('Ymd_His') . '.zip';
+            $sourcePath = dirname($request->source_path); // folder wordpress
+
+            $zipCommand = "cd {$sourcePath} && zip -r {$backupFiles} .";
+            $ssh->exec($zipCommand);
+
+
+            // buat symlink ke public-html sementara
+            $publicLink = "/home/".$request->source_username."/public_html/tmp-backups";
+            $backupFolder = "/home/".$request->source_username."/backups";
+
+            // hapus jika sudah ada
+            $ssh->exec("rm -rf {$publicLink}");
+
+            // buat symlink
+            $ssh->exec("ln -s {$backupFolder} {$publicLink}");
+
+            // get basename hasil backup db dan wp
+            $backupDBName = basename($backupFile);
+            $backupWPName = basename($backupFiles);
+
+            // create url wget
+            $backupDBurl = $request->source_host."/tmp-backups/".$backupDBName;
+            $backupWPurl = $request->source_host."/tmp-backups/".$backupWPName;
+
+            // wget dari hosting baru
+            $targetBackupFolder = "/home/".$request->target_username."/".$request->target_path;
+
+            $sshB->exec("mkdir -p {$targetBackupFolder}");
+
+            $sshB->exec("wget -c -O {$targetBackupFolder}/{$backupDBName} {$backupDBurl}");
+            $sshB->exec("wget -c -O {$targetBackupFolder}/{$backupWPName} {$backupWPurl}");
+
+
+
+            return response()->json([
+                'status' => 'OK',
+                'db_info' => $dbInfo,
+                'backup_file' => $backupFile,
+                'backup_files' => $backupFiles
+            ]);
+        } else {
+            return response()->json([
+                'status' => 'BAD',
+                'message' => $testA['message']
+            ]);
+        }
+
+       
+
         // dd($testB);
 
         // simpan data migrasi
@@ -68,13 +151,15 @@ class SSHController extends Controller
         ]);
 
         return response()->json([
-
             'migration_id' => $migration->id,
-
-            'hosting_a' => $testA,
-
-            'hosting_b' => $testB
-
+            'hosting_a' => [
+                'status' => $testA['status'],
+                'message' => $testA['message']
+            ],
+            'hosting_b' => [
+                'status' => $testB['status'],
+                'message' => $testB['message']
+            ]
         ]);
 
     }
