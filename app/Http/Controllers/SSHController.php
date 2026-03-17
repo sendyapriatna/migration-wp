@@ -56,6 +56,7 @@ class SSHController extends Controller
 
             // cek file wp-config.php
             // note* update public_html/ipcek.sndyaccess.my.id/wp-config.php >> ke dinamis by $request
+            // *absolute path
             $output = $ssh->exec('cat '.$request->source_path. '/wp-config.php');
 
             //parsing wp config
@@ -110,7 +111,9 @@ class SSHController extends Controller
             $backupWPurl = $request->source_host."/tmp-backups/".$backupWPName;
 
             // wget dari hosting baru
-            $targetBackupFolder = "/home/".$request->target_username."/".$request->target_path;
+            // input perlu absolute path
+            // $targetBackupFolder = "/home/".$request->target_username."/".$request->target_path;
+            $targetBackupFolder = $request->target_path;
 
             $sshB->exec("mkdir -p {$targetBackupFolder}");
 

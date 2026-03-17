@@ -8,7 +8,7 @@
   </head>
   <body>
     <div>
-        <form action="wp/store" method="POST">
+        <form action="{{ url('wp/store') }}" method="POST">
             @csrf
             <table class="table">
                 <thead>
